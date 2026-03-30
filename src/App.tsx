@@ -44,7 +44,7 @@ import {
   Calculator,
   User as UserIcon,
   AlertCircle,
-  SquareArrowOutUpRight
+  Store
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -173,6 +173,7 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
 };
 
 export default function App() {
+  const MIN_DATE = useMemo(() => new Date(2026, 2, 1), []); // March 2026
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewDate, setViewDate] = useState(new Date());
@@ -366,7 +367,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-airbnb"></div>
       </div>
     );
   }
@@ -377,8 +378,8 @@ export default function App() {
         {/* Header */}
         <header className="bg-white px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-              <SquareArrowOutUpRight className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 bg-airbnb rounded-xl flex items-center justify-center shadow-lg shadow-airbnb/20">
+              <Store className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-xl font-bold tracking-tight">營運管理</h1>
           </div>
@@ -399,7 +400,20 @@ export default function App() {
               >
                 {/* Date Selector */}
                 <div className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
-                  <button onClick={() => setCurrentDate(subMonths(currentDate, 0).setDate(currentDate.getDate() - 1) && new Date(currentDate.setDate(currentDate.getDate() - 1)))} className="p-2 bg-gray-50 rounded-lg">
+                  <button 
+                    onClick={() => {
+                      const prev = new Date(currentDate);
+                      prev.setDate(prev.getDate() - 1);
+                      if (prev >= startOfDay(MIN_DATE)) {
+                        setCurrentDate(prev);
+                      }
+                    }} 
+                    disabled={isSameDay(currentDate, startOfDay(MIN_DATE))}
+                    className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      isSameDay(currentDate, startOfDay(MIN_DATE)) ? "bg-gray-50 text-gray-200" : "bg-gray-50 text-gray-600"
+                    )}
+                  >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <div className="text-center">
@@ -417,7 +431,7 @@ export default function App() {
                     onClick={() => setDailySubTab('performance')}
                     className={cn(
                       "flex-1 py-3 rounded-xl font-bold text-sm transition-all",
-                      dailySubTab === 'performance' ? "bg-blue-600 text-white shadow-md" : "text-gray-400"
+                      dailySubTab === 'performance' ? "bg-airbnb text-white shadow-md" : "text-gray-400"
                     )}
                   >
                     1. 營運績效看板
@@ -426,7 +440,7 @@ export default function App() {
                     onClick={() => setDailySubTab('adjustment')}
                     className={cn(
                       "flex-1 py-3 rounded-xl font-bold text-sm transition-all",
-                      dailySubTab === 'adjustment' ? "bg-indigo-600 text-white shadow-md" : "text-gray-400"
+                      dailySubTab === 'adjustment' ? "bg-gray-800 text-white shadow-md" : "text-gray-400"
                     )}
                   >
                     2. 盤前帳面調節
@@ -442,7 +456,7 @@ export default function App() {
                       exit={{ opacity: 0, x: 10 }}
                       className="bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-100"
                     >
-                      <div className="bg-blue-600 px-6 py-4 flex items-center gap-2">
+                      <div className="bg-airbnb px-6 py-4 flex items-center gap-2">
                         <Calculator className="w-5 h-5 text-white" />
                         <h2 className="text-white font-bold">營運績效看板</h2>
                       </div>
@@ -457,7 +471,7 @@ export default function App() {
 
                         <div className="mt-6 bg-gray-50 rounded-2xl p-4 space-y-4">
                           <div className="space-y-2">
-                            <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">早班數據</div>
+                            <div className="text-[10px] font-bold text-airbnb uppercase tracking-widest mb-1">早班數據</div>
                             <ResultRow label="早班營業額" value={dailyData.morningSales} />
                             <ResultRow label="早班來客數" value={dailyData.morningCustomers} />
                             <ResultRow label="早班客單價" value={calculated.morningAOV} isCurrency />
@@ -466,7 +480,7 @@ export default function App() {
                           <div className="h-px bg-gray-200" />
                           
                           <div className="space-y-2">
-                            <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">晚班數據</div>
+                            <div className="text-[10px] font-bold text-gray-800 uppercase tracking-widest mb-1">晚班數據</div>
                             <ResultRow label="晚班營業額" value={calculated.eveningSales} />
                             <ResultRow label="晚班來客數" value={calculated.eveningCustomers} />
                             <ResultRow label="晚班客單價" value={calculated.eveningAOV} isCurrency />
@@ -481,7 +495,7 @@ export default function App() {
                             <ResultRow label="整日客單價" value={calculated.totalAOV} isCurrency />
                           </div>
 
-                          <div className="h-px bg-blue-200 border-dashed border-t" />
+                          <div className="h-px bg-airbnb/20 border-dashed border-t" />
 
                           <div className="space-y-2">
                             <div className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1">當月累積 (MTD)</div>
@@ -507,7 +521,7 @@ export default function App() {
                       exit={{ opacity: 0, x: -10 }}
                       className="bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-100"
                     >
-                      <div className="bg-indigo-600 px-6 py-4 flex items-center gap-2">
+                      <div className="bg-gray-800 px-6 py-4 flex items-center gap-2">
                         <History className="w-5 h-5 text-white" />
                         <h2 className="text-white font-bold">盤前帳面調節表</h2>
                       </div>
@@ -524,8 +538,8 @@ export default function App() {
                         <div className="grid grid-cols-1">
                           <InputGroup label="銷貨加項" value={dailyData.salesAddition} onChange={v => setDailyData({...dailyData, salesAddition: v})} />
                         </div>
-                        <div className="mt-4 bg-indigo-50 rounded-2xl p-4">
-                          <ResultRow label="帳面合計 (累計)" value={calculated.bookTotal} highlight color="text-indigo-600" />
+                        <div className="mt-4 bg-gray-50 rounded-2xl p-4">
+                          <ResultRow label="帳面合計 (累計)" value={calculated.bookTotal} highlight color="text-gray-800" />
                         </div>
                       </div>
                     </motion.section>
@@ -537,7 +551,7 @@ export default function App() {
                   disabled={isSaving}
                   className={cn(
                     "w-full py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95",
-                    isSaving ? "bg-gray-400" : "bg-blue-600 text-white hover:bg-blue-700"
+                    isSaving ? "bg-gray-400" : "bg-airbnb text-white hover:bg-airbnb/90"
                   )}
                 >
                   {isSaving ? (
@@ -561,7 +575,19 @@ export default function App() {
                 className="space-y-6"
               >
                 <div className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
-                  <button onClick={() => setViewDate(subMonths(viewDate, 1))} className="p-2 bg-gray-50 rounded-lg">
+                  <button 
+                    onClick={() => {
+                      const prev = subMonths(viewDate, 1);
+                      if (prev >= startOfMonth(MIN_DATE)) {
+                        setViewDate(prev);
+                      }
+                    }} 
+                    disabled={format(viewDate, 'yyyy-MM') === format(MIN_DATE, 'yyyy-MM')}
+                    className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      format(viewDate, 'yyyy-MM') === format(MIN_DATE, 'yyyy-MM') ? "bg-gray-50 text-gray-200" : "bg-gray-50 text-gray-600"
+                    )}
+                  >
                     <ChevronLeft className="w-5 h-5" />
                   </button>
                   <div className="text-lg font-bold">{format(viewDate, 'yyyy年 MM月')}</div>
@@ -574,7 +600,7 @@ export default function App() {
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">本月 PSD 目標設定</h3>
-                    {isSavingGoal && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-blue-600"></div>}
+                    {isSavingGoal && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-airbnb"></div>}
                   </div>
                   <div className="flex gap-3">
                     <input 
@@ -587,11 +613,11 @@ export default function App() {
                       }}
                       onBlur={() => handleSaveGoal(monthlyGoal)}
                       placeholder="請輸入目標金額"
-                      className="flex-1 bg-gray-50 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
+                      className="flex-1 bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
                     />
                     <button 
                       onClick={() => handleSaveGoal(monthlyGoal)}
-                      className="bg-blue-600 text-white px-6 rounded-xl font-bold shadow-md active:scale-95 transition-all"
+                      className="bg-airbnb text-white px-6 rounded-xl font-bold shadow-md active:scale-95 transition-all"
                     >
                       設定
                     </button>
@@ -601,7 +627,7 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                     <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">累計 PSD</div>
-                    <div className="text-2xl font-black text-blue-600">{monthlyStats.totalPSD.toLocaleString()}</div>
+                    <div className="text-2xl font-black text-airbnb">{monthlyStats.totalPSD.toLocaleString()}</div>
                   </div>
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                     <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">累計來客</div>
@@ -623,7 +649,7 @@ export default function App() {
                     onClick={() => setMonthlySubTab('performance')}
                     className={cn(
                       "flex-1 py-3 rounded-xl font-bold text-sm transition-all",
-                      monthlySubTab === 'performance' ? "bg-blue-600 text-white shadow-md" : "text-gray-400"
+                      monthlySubTab === 'performance' ? "bg-airbnb text-white shadow-md" : "text-gray-400"
                     )}
                   >
                     營運績效
@@ -632,7 +658,7 @@ export default function App() {
                     onClick={() => setMonthlySubTab('adjustment')}
                     className={cn(
                       "flex-1 py-3 rounded-xl font-bold text-sm transition-all",
-                      monthlySubTab === 'adjustment' ? "bg-indigo-600 text-white shadow-md" : "text-gray-400"
+                      monthlySubTab === 'adjustment' ? "bg-gray-800 text-white shadow-md" : "text-gray-400"
                     )}
                   >
                     帳面調節
@@ -660,7 +686,7 @@ export default function App() {
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">整日額</th>
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">整日客</th>
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">隱眼</th>
-                                <th className="px-4 py-3 text-[10px] font-bold text-blue-600 uppercase whitespace-nowrap">PSD</th>
+                                <th className="px-4 py-3 text-[10px] font-bold text-airbnb uppercase whitespace-nowrap">PSD</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -674,7 +700,7 @@ export default function App() {
                                 return (
                                   <tr 
                                     key={dStr} 
-                                    className={cn("border-b border-gray-50 active:bg-gray-50", isSameDay(day, new Date()) && "bg-blue-50/30")}
+                                    className={cn("border-b border-gray-50 active:bg-gray-50", isSameDay(day, new Date()) && "bg-airbnb/5")}
                                     onClick={() => {
                                       setCurrentDate(day);
                                       setActiveTab('daily');
@@ -688,7 +714,7 @@ export default function App() {
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.totalSales.toLocaleString() || '-'}</td>
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.totalCustomers.toLocaleString() || '-'}</td>
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.contactLensSales.toLocaleString() || '-'}</td>
-                                    <td className="px-4 py-3 text-xs font-bold text-blue-600 tabular-nums">{data ? actualPSD.toLocaleString() : '-'}</td>
+                                    <td className="px-4 py-3 text-xs font-bold text-airbnb tabular-nums">{data ? actualPSD.toLocaleString() : '-'}</td>
                                   </tr>
                                 );
                               })}
@@ -707,7 +733,7 @@ export default function App() {
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">變價</th>
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">銷貨收入</th>
                                 <th className="px-4 py-3 text-[10px] font-bold text-gray-400 uppercase whitespace-nowrap">銷貨加項</th>
-                                <th className="px-4 py-3 text-[10px] font-bold text-indigo-600 uppercase whitespace-nowrap">累計帳面</th>
+                                <th className="px-4 py-3 text-[10px] font-bold text-gray-800 uppercase whitespace-nowrap">累計帳面</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -722,7 +748,7 @@ export default function App() {
                                 return (
                                   <tr 
                                     key={dStr} 
-                                    className={cn("border-b border-gray-50 active:bg-gray-50", isSameDay(day, new Date()) && "bg-indigo-50/30")}
+                                    className={cn("border-b border-gray-50 active:bg-gray-50", isSameDay(day, new Date()) && "bg-gray-100/50")}
                                     onClick={() => {
                                       setCurrentDate(day);
                                       setActiveTab('daily');
@@ -734,7 +760,7 @@ export default function App() {
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.priceChangeAmount.toLocaleString() || '-'}</td>
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.totalSales.toLocaleString() || '-'}</td>
                                     <td className="px-4 py-3 text-xs text-gray-500 tabular-nums">{data?.salesAddition.toLocaleString() || '-'}</td>
-                                    <td className="px-4 py-3 text-xs font-bold text-indigo-600 tabular-nums">{data ? cumulative.toLocaleString() : '-'}</td>
+                                    <td className="px-4 py-3 text-xs font-bold text-gray-800 tabular-nums">{data ? cumulative.toLocaleString() : '-'}</td>
                                   </tr>
                                 );
                               })}
@@ -758,11 +784,16 @@ export default function App() {
               >
                 <h2 className="text-2xl font-bold px-2">歷史紀錄概覽</h2>
                 <div className="space-y-3">
-                  {/* Just a simple list of last 6 months for demo */}
-                  {[0, 1, 2, 3, 4, 5].map(m => {
-                    const d = subMonths(new Date(), m);
-                    return (
-                      <div key={m} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+                  {/* List of months from MIN_DATE to current month */}
+                  {(() => {
+                    const months = [];
+                    let d = startOfMonth(new Date());
+                    while (d >= startOfMonth(MIN_DATE)) {
+                      months.push(new Date(d));
+                      d = subMonths(d, 1);
+                    }
+                    return months.map((d, i) => (
+                      <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
                         <div>
                           <div className="text-lg font-bold">{format(d, 'yyyy年 MM月')}</div>
                           <div className="text-sm text-gray-400">點擊查看月報表</div>
@@ -772,13 +803,13 @@ export default function App() {
                             setViewDate(d);
                             setActiveTab('monthly');
                           }}
-                          className="p-3 bg-gray-50 rounded-xl text-blue-600"
+                          className="p-3 bg-gray-50 rounded-xl text-airbnb"
                         >
                           <ChevronRight className="w-6 h-6" />
                         </button>
                       </div>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </motion.div>
             )}
@@ -806,7 +837,7 @@ function InputGroup({ label, value, onChange }: { label: string, value: number, 
         value={value || ''} 
         onChange={e => onChange(parseFloat(e.target.value) || 0)}
         placeholder="0"
-        className="w-full bg-gray-50 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
+        className="w-full bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
       />
     </div>
   );
@@ -834,7 +865,7 @@ function NavButton({ active, onClick, icon, label }: { active: boolean, onClick:
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-1 transition-all",
-        active ? "text-blue-600 scale-110" : "text-gray-300"
+        active ? "text-airbnb scale-110" : "text-gray-300"
       )}
     >
       {React.cloneElement(icon as React.ReactElement, { className: "w-6 h-6" })}
