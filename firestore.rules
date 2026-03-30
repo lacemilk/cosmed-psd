@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: dailyReports
+    // Document ID: YYYY-MM-DD
+    // Fields:
+    //   - morningSales: number
+    //   - morningCustomers: number
+    //   - totalSales: number
+    //   - totalCustomers: number
+    //   - contactLensSales: number
+    //   - allianceReturns: number
+    //   - transferAmount: number
+    //   - priceChangeAmount: number
+    //   - salesAddition: number
+    //   - psdGoal: number
+    //   - updatedAt: timestamp
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    match /dailyReports/{date} {
+      // User requested direct access without login
+      allow read, write: if true;
+    }
+
+    match /monthlyGoals/{month} {
+      // User requested direct access without login
+      allow read, write: if true;
+    }
+  }
+}

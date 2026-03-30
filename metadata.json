@@ -1,0 +1,5 @@
+{
+  "name": "門市營運管理 Web App",
+  "description": "專為手機操作設計的門市營運管理系統，支援每日數據填報、自動計算與月度概覽。",
+  "requestFramePermissions": []
+}

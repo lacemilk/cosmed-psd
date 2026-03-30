@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "DailyReport": {
+      "title": "Daily Report",
+      "description": "Daily store operation data and book adjustments.",
+      "type": "object",
+      "properties": {
+        "morningSales": { "type": "number", "description": "早班營業額" },
+        "morningCustomers": { "type": "number", "description": "早班來客數" },
+        "totalSales": { "type": "number", "description": "整日營業額" },
+        "totalCustomers": { "type": "number", "description": "整日來客數" },
+        "contactLensSales": { "type": "number", "description": "隱形眼鏡營業額" },
+        "allianceReturns": { "type": "number", "description": "結盟進退貨金額" },
+        "transferAmount": { "type": "number", "description": "調撥金額" },
+        "priceChangeAmount": { "type": "number", "description": "變價金額" },
+        "salesAddition": { "type": "number", "description": "銷貨加項" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["totalSales", "updatedAt"]
+    },
+    "MonthlyGoal": {
+      "title": "Monthly Goal",
+      "description": "Store operation goals for a specific month.",
+      "type": "object",
+      "properties": {
+        "psdGoal": { "type": "number", "description": "本月 PSD 目標" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["psdGoal", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "dailyReports/{date}": {
+      "schema": "DailyReport",
+      "description": "Collection of daily reports indexed by YYYY-MM-DD."
+    },
+    "monthlyGoals/{month}": {
+      "schema": "MonthlyGoal",
+      "description": "Monthly goals indexed by YYYY-MM."
+    }
+  }
+}
