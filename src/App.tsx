@@ -30,6 +30,7 @@ import {
   isSameDay, 
   addMonths, 
   subMonths,
+  subDays,
   parseISO,
   startOfDay
 } from 'date-fns';
@@ -144,11 +145,24 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
         const parsed = JSON.parse(event.error.message);
         setErrorMsg(parsed.error || '發生未知錯誤');
       } catch {
-        setErrorMsg(event.error.message || '發生未知錯誤');
+        setErrorMsg(event.error?.message || '發生未知錯誤');
+      }
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      setHasError(true);
+      try {
+        const parsed = JSON.parse(event.reason.message);
+        setErrorMsg(parsed.error || '發生未知錯誤');
+      } catch {
+        setErrorMsg(event.reason.message || '發生未知錯誤');
       }
     };
     window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
   }, []);
 
   if (hasError) {
@@ -172,10 +186,15 @@ const ErrorBoundary = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// --- Constants ---
+const MIN_DATE = new Date(2026, 2, 1); // March 2026
+
 export default function App() {
-  const MIN_DATE = useMemo(() => new Date(2026, 2, 1), []); // March 2026
   const [loading, setLoading] = useState(true);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => {
+    const yesterday = subDays(new Date(), 1);
+    return yesterday < MIN_DATE ? MIN_DATE : yesterday;
+  });
   const [viewDate, setViewDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'history'>('daily');
   const [dailySubTab, setDailySubTab] = useState<'performance' | 'adjustment'>('performance');
@@ -188,17 +207,33 @@ export default function App() {
 
   // --- Initialization ---
   useEffect(() => {
-    testConnection();
-    setLoading(false);
+    const init = async () => {
+      await testConnection();
+      setLoading(false);
+    };
+    init();
   }, []);
 
   const testConnection = async () => {
     try {
-      await getDocFromServer(doc(db, 'test', 'connection'));
+      // Use a timeout for the connection test
+      const connectionPromise = getDocFromServer(doc(db, 'test', 'connection'));
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('連線逾時，請檢查 Firebase 設定或網路連線')), 5000)
+      );
+      
+      await Promise.race([connectionPromise, timeoutPromise]);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('the client is offline')) {
-        console.error("Please check your Firebase configuration.");
+      console.error("Firebase Connection Error:", error);
+      if (error instanceof Error) {
+        if (error.message.includes('the client is offline') || error.message.includes('逾時')) {
+          throw new Error(JSON.stringify({ error: "無法連線至資料庫。請確認您的 Firebase 金鑰是否正確，且資料庫 ID 是否為 (default)。" }));
+        }
+        if (error.message.includes('Missing or insufficient permissions')) {
+          throw new Error(JSON.stringify({ error: "權限不足。請確認 Firestore 安全規則已正確部署，並允許讀取 test/connection 路徑。" }));
+        }
       }
+      throw error;
     }
   };
 
@@ -273,12 +308,21 @@ export default function App() {
     setIsSaving(true);
     const dateStr = format(currentDate, 'yyyy-MM-dd');
     try {
-      await setDoc(doc(db, 'dailyReports', dateStr), {
+      const savePromise = setDoc(doc(db, 'dailyReports', dateStr), {
         ...dailyData,
         updatedAt: serverTimestamp()
       });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('儲存逾時，請檢查網路連線或 Firebase 設定')), 8000)
+      );
+
+      await Promise.race([savePromise, timeoutPromise]);
+      alert('數據已成功儲存！');
     } catch (error) {
+      console.error("Save Error:", error);
       handleFirestoreError(error, OperationType.WRITE, `dailyReports/${dateStr}`);
+      alert(error instanceof Error ? error.message : '儲存失敗，請稍後再試');
     } finally {
       setIsSaving(false);
     }
@@ -288,12 +332,21 @@ export default function App() {
     setIsSavingGoal(true);
     const monthStr = format(viewDate, 'yyyy-MM');
     try {
-      await setDoc(doc(db, 'monthlyGoals', monthStr), {
+      const savePromise = setDoc(doc(db, 'monthlyGoals', monthStr), {
         psdGoal: goal,
         updatedAt: serverTimestamp()
       });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('設定逾時，請檢查網路連線或 Firebase 設定')), 8000)
+      );
+
+      await Promise.race([savePromise, timeoutPromise]);
+      alert('目標已成功設定！');
     } catch (error) {
+      console.error("Save Goal Error:", error);
       handleFirestoreError(error, OperationType.WRITE, `monthlyGoals/${monthStr}`);
+      alert(error instanceof Error ? error.message : '設定失敗，請稍後再試');
     } finally {
       setIsSavingGoal(false);
     }
@@ -308,9 +361,8 @@ export default function App() {
     
     const morningAOV = morningCustomers > 0 ? morningSales / morningCustomers : 0;
     const eveningAOV = eveningCustomers > 0 ? eveningSales / eveningCustomers : 0;
-    const totalAOV = totalCustomers > 0 ? totalSales / totalCustomers : 0;
-    
     const actualPSD = totalSales - contactLensSales;
+    const totalAOV = totalCustomers > 0 ? actualPSD / totalCustomers : 0;
     
     // Book Total Calculation (Cumulative for the current month)
     const dateKey = format(currentDate, 'yyyy-MM-dd');
@@ -359,9 +411,10 @@ export default function App() {
     
     const goal = monthlyGoal;
     const monthlyAverage = daysCount > 0 ? totalPSD / daysCount : 0;
+    const monthlyAOV = totalCustomers > 0 ? totalPSD / totalCustomers : 0;
     const achievement = goal > 0 ? (monthlyAverage / goal) * 100 : 0;
     
-    return { totalPSD, totalCustomers, goal, achievement, monthlyAverage, daysWithData: daysCount };
+    return { totalPSD, totalCustomers, goal, achievement, monthlyAverage, monthlyAOV, daysWithData: daysCount };
   }, [monthlyData, dailyData, monthlyGoal, currentDate, viewDate]);
 
   if (loading) {
@@ -526,10 +579,12 @@ export default function App() {
                         <h2 className="text-white font-bold">盤前帳面調節表</h2>
                       </div>
                       <div className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           <InputGroup label="結盟進退貨" value={dailyData.allianceReturns} onChange={v => setDailyData({...dailyData, allianceReturns: v})} />
-                          <InputGroup label="調撥金額" value={dailyData.transferAmount} onChange={v => setDailyData({...dailyData, transferAmount: v})} />
-                          <InputGroup label="變價金額" value={dailyData.priceChangeAmount} onChange={v => setDailyData({...dailyData, priceChangeAmount: v})} />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <SignedInputGroup label="調撥金額" value={dailyData.transferAmount} onChange={v => setDailyData({...dailyData, transferAmount: v})} />
+                            <SignedInputGroup label="變價金額" value={dailyData.priceChangeAmount} onChange={v => setDailyData({...dailyData, priceChangeAmount: v})} />
+                          </div>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-xl flex justify-between items-center">
                           <span className="text-gray-500 text-sm font-medium">銷貨收入 (整日營業額)</span>
@@ -640,6 +695,10 @@ export default function App() {
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                     <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">達成率</div>
                     <div className="text-2xl font-black text-green-600">{monthlyStats.achievement.toFixed(1)}%</div>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                    <div className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">平均客單價</div>
+                    <div className="text-2xl font-black text-blue-600">{Math.round(monthlyStats.monthlyAOV).toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -839,6 +898,48 @@ function InputGroup({ label, value, onChange }: { label: string, value: number, 
         placeholder="0"
         className="w-full bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
       />
+    </div>
+  );
+}
+
+function SignedInputGroup({ label, value, onChange }: { label: string, value: number, onChange: (v: number) => void }) {
+  const isNegative = value < 0 || Object.is(value, -0);
+  const absValue = Math.abs(value);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">{label}</label>
+      <div className="flex gap-2">
+        <button 
+          type="button"
+          onClick={() => {
+            if (value === 0) {
+              onChange(isNegative ? 0 : -0);
+            } else {
+              onChange(-value);
+            }
+          }}
+          className={cn(
+            "w-14 rounded-xl font-bold text-xl transition-all border-2 flex items-center justify-center shrink-0",
+            isNegative 
+              ? "bg-red-50 border-red-100 text-red-500 shadow-sm" 
+              : "bg-green-50 border-green-100 text-green-500 shadow-sm"
+          )}
+        >
+          {isNegative ? '-' : '+'}
+        </button>
+        <input 
+          type="number" 
+          inputMode="decimal"
+          value={absValue === 0 ? '' : absValue} 
+          onChange={e => {
+            const val = Math.abs(parseFloat(e.target.value) || 0);
+            onChange(isNegative ? (val === 0 ? -0 : -val) : val);
+          }}
+          placeholder="0"
+          className="flex-1 bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
+        />
+      </div>
     </div>
   );
 }
