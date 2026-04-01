@@ -417,40 +417,37 @@ export default function App() {
     return { totalPSD, totalCustomers, goal, achievement, monthlyAverage, monthlyAOV, daysWithData: daysCount };
   }, [monthlyData, dailyData, monthlyGoal, currentDate, viewDate]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-airbnb"></div>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50 pb-24 font-sans text-gray-900">
-        {/* Header */}
-        <header className="bg-white px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-airbnb rounded-xl flex items-center justify-center shadow-lg shadow-airbnb/20">
-              <Store className="w-6 h-6 text-white" />
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-airbnb"></div>
+        </div>
+      ) : (
+        <div className="min-h-screen bg-gray-50 pb-24 font-sans text-gray-900">
+          {/* Header */}
+          <header className="bg-white px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-airbnb rounded-xl flex items-center justify-center shadow-lg shadow-airbnb/20">
+                <Store className="w-6 h-6 text-white" />
+              </div>
+              <h1 className="text-xl font-bold tracking-tight">營運管理</h1>
             </div>
-            <h1 className="text-xl font-bold tracking-tight">營運管理</h1>
-          </div>
-          <button onClick={handleLogout} className="p-2 text-gray-400">
-            <UserIcon className="w-6 h-6" />
-          </button>
-        </header>
+            <button onClick={handleLogout} className="p-2 text-gray-400">
+              <UserIcon className="w-6 h-6" />
+            </button>
+          </header>
 
-        <main className="p-4 max-w-2xl mx-auto">
-          <AnimatePresence mode="wait">
-            {activeTab === 'daily' && (
-              <motion.div 
-                key="daily"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
-              >
+          <main className="p-4 max-w-2xl mx-auto">
+            <AnimatePresence mode="wait">
+              {activeTab === 'daily' && (
+                <motion.div 
+                  key="daily"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
                 {/* Date Selector */}
                 <div className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
                   <button 
@@ -882,8 +879,9 @@ export default function App() {
           <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History />} label="歷史數據" />
         </nav>
       </div>
-    </ErrorBoundary>
-  );
+    )}
+  </ErrorBoundary>
+);
 }
 
 function InputGroup({ label, value, onChange }: { label: string, value: number, onChange: (v: number) => void }) {
