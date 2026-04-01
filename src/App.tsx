@@ -546,8 +546,13 @@ export default function App() {
           {/* Header */}
           <header className="bg-white px-6 py-5 flex items-center justify-between shadow-sm sticky top-0 z-10">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-airbnb rounded-[28%] flex items-center justify-center shadow-lg shadow-airbnb/25">
-                <Store className="w-7 h-7 text-white" />
+              <div className="w-12 h-12 rounded-[28%] flex items-center justify-center shadow-lg shadow-airbnb/25 overflow-hidden">
+                <img 
+                  src="https://lh3.googleusercontent.com/d/1j6i7k4UyuYniAnOIh6uw8XgMw07SZgFY" 
+                  alt="App Icon" 
+                  className="w-full h-full object-cover scale-[1.45]"
+                  referrerPolicy="no-referrer"
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold tracking-tight leading-none">營運管理</h1>
