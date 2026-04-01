@@ -13,7 +13,8 @@ import {
   query, 
   where,
   serverTimestamp,
-  getDocFromServer
+  getDocFromServer,
+  getDocs
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -45,7 +46,10 @@ import {
   Calculator,
   User as UserIcon,
   AlertCircle,
-  Store
+  Store,
+  ArrowLeftRight,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -108,6 +112,12 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 // --- Types ---
+interface TransferEntry {
+  id: string;
+  amount: number;
+  type: 'plus' | 'minus';
+}
+
 interface DailyData {
   morningSales: number;
   morningCustomers: number;
@@ -118,6 +128,7 @@ interface DailyData {
   transferAmount: number;
   priceChangeAmount: number;
   salesAddition: number;
+  transfers: TransferEntry[];
 }
 
 const DEFAULT_DATA: DailyData = {
@@ -130,6 +141,7 @@ const DEFAULT_DATA: DailyData = {
   transferAmount: 0,
   priceChangeAmount: 0,
   salesAddition: 0,
+  transfers: [],
 };
 
 // --- Components ---
@@ -196,12 +208,15 @@ export default function App() {
     return yesterday < MIN_DATE ? MIN_DATE : yesterday;
   });
   const [viewDate, setViewDate] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'history'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'transfers' | 'monthly' | 'history'>('daily');
   const [dailySubTab, setDailySubTab] = useState<'performance' | 'adjustment'>('performance');
   const [monthlySubTab, setMonthlySubTab] = useState<'performance' | 'adjustment'>('performance');
   const [dailyData, setDailyData] = useState<DailyData>(DEFAULT_DATA);
-  const [monthlyData, setMonthlyData] = useState<Record<string, DailyData>>({});
+  const [viewMonthlyData, setViewMonthlyData] = useState<Record<string, DailyData>>({});
+  const [currentMonthlyData, setCurrentMonthlyData] = useState<Record<string, DailyData>>({});
   const [monthlyGoal, setMonthlyGoal] = useState<number>(0);
+  const [previousBalance, setPreviousBalance] = useState<number>(0);
+  const [currentMonthPreviousBalance, setCurrentMonthPreviousBalance] = useState<number>(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingGoal, setIsSavingGoal] = useState(false);
 
@@ -261,14 +276,34 @@ export default function App() {
   }, [currentDate]);
 
   useEffect(() => {
+    const monthStr = format(currentDate, 'yyyy-MM');
+    const goalRef = doc(db, 'monthlyGoals', monthStr);
+
+    const unsubscribe = onSnapshot(goalRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setCurrentMonthPreviousBalance(snapshot.data().previousBalance || 0);
+      } else {
+        setCurrentMonthPreviousBalance(0);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `monthlyGoals/${monthStr}`);
+    });
+
+    return () => unsubscribe();
+  }, [currentDate]);
+
+  useEffect(() => {
     const monthStr = format(viewDate, 'yyyy-MM');
     const goalRef = doc(db, 'monthlyGoals', monthStr);
 
     const unsubscribe = onSnapshot(goalRef, (snapshot) => {
       if (snapshot.exists()) {
-        setMonthlyGoal(snapshot.data().psdGoal || 0);
+        const data = snapshot.data();
+        setMonthlyGoal(data.psdGoal || 0);
+        setPreviousBalance(data.previousBalance || 0);
       } else {
         setMonthlyGoal(0);
+        setPreviousBalance(0);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `monthlyGoals/${monthStr}`);
@@ -277,14 +312,57 @@ export default function App() {
     return () => unsubscribe();
   }, [viewDate]);
 
+  // Auto-calculate previous month's balance if not set
   useEffect(() => {
-    const start = startOfMonth(viewDate);
-    const end = endOfMonth(viewDate);
+    const checkAndAutoFill = async () => {
+      const monthStr = format(viewDate, 'yyyy-MM');
+      const goalRef = doc(db, 'monthlyGoals', monthStr);
+      const snap = await getDoc(goalRef);
+      
+      // Only auto-fill if the current month's previousBalance is not set in Firestore
+      if (!snap.exists() || snap.data().previousBalance === undefined) {
+        const prevMonth = subMonths(viewDate, 1);
+        const prevMonthStr = format(prevMonth, 'yyyy-MM');
+        
+        // Fetch previous month's goal/balance
+        const prevGoalRef = doc(db, 'monthlyGoals', prevMonthStr);
+        const prevGoalSnap = await getDoc(prevGoalRef);
+        const prevStartBal = prevGoalSnap.exists() ? (prevGoalSnap.data().previousBalance || 0) : 0;
+        
+        // Fetch previous month's daily reports
+        const start = startOfMonth(prevMonth);
+        const end = endOfMonth(prevMonth);
+        const q = query(
+          collection(db, 'dailyReports'),
+          where('__name__', '>=', format(start, 'yyyy-MM-dd')),
+          where('__name__', '<=', format(end, 'yyyy-MM-dd'))
+        );
+        
+        const dailySnap = await getDocs(q);
+        let prevMonthChange = 0;
+        dailySnap.forEach(doc => {
+          const d = doc.data() as DailyData;
+          prevMonthChange += (d.allianceReturns + d.transferAmount + d.priceChangeAmount - d.totalSales - d.salesAddition);
+        });
+        
+        const calculatedPrevEndBal = prevStartBal + prevMonthChange;
+        if (calculatedPrevEndBal !== 0) {
+          setPreviousBalance(calculatedPrevEndBal);
+        }
+      }
+    };
+
+    if (!loading) {
+      checkAndAutoFill();
+    }
+  }, [viewDate, loading]);
+
+  useEffect(() => {
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
     const dateStrStart = format(start, 'yyyy-MM-dd');
     const dateStrEnd = format(end, 'yyyy-MM-dd');
 
-    // In a real app, we might use a query for the month.
-    // For simplicity and real-time sync of the whole month:
     const q = query(
       collection(db, 'dailyReports'),
       where('__name__', '>=', dateStrStart),
@@ -296,7 +374,32 @@ export default function App() {
       snapshot.docs.forEach(doc => {
         data[doc.id] = doc.data() as DailyData;
       });
-      setMonthlyData(data);
+      setCurrentMonthlyData(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'dailyReports');
+    });
+
+    return () => unsubscribe();
+  }, [currentDate]);
+
+  useEffect(() => {
+    const start = startOfMonth(viewDate);
+    const end = endOfMonth(viewDate);
+    const dateStrStart = format(start, 'yyyy-MM-dd');
+    const dateStrEnd = format(end, 'yyyy-MM-dd');
+
+    const q = query(
+      collection(db, 'dailyReports'),
+      where('__name__', '>=', dateStrStart),
+      where('__name__', '<=', dateStrEnd)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data: Record<string, DailyData> = {};
+      snapshot.docs.forEach(doc => {
+        data[doc.id] = doc.data() as DailyData;
+      });
+      setViewMonthlyData(data);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'dailyReports');
     });
@@ -308,8 +411,14 @@ export default function App() {
     setIsSaving(true);
     const dateStr = format(currentDate, 'yyyy-MM-dd');
     try {
+      // Calculate transferAmount from transfers array before saving
+      const transferAmount = (dailyData.transfers || []).reduce((sum, t) => {
+        return sum + (t.amount * (t.type === 'plus' ? 1 : -1));
+      }, 0);
+
       const savePromise = setDoc(doc(db, 'dailyReports', dateStr), {
         ...dailyData,
+        transferAmount,
         updatedAt: serverTimestamp()
       });
       
@@ -328,21 +437,22 @@ export default function App() {
     }
   };
 
-  const handleSaveGoal = async (goal: number) => {
+  const handleSaveGoal = async (goal: number, prevBal: number) => {
     setIsSavingGoal(true);
     const monthStr = format(viewDate, 'yyyy-MM');
     try {
       const savePromise = setDoc(doc(db, 'monthlyGoals', monthStr), {
         psdGoal: goal,
+        previousBalance: prevBal,
         updatedAt: serverTimestamp()
-      });
+      }, { merge: true });
       
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('設定逾時，請檢查網路連線或 Firebase 設定')), 8000)
       );
 
       await Promise.race([savePromise, timeoutPromise]);
-      alert('目標已成功設定！');
+      alert('目標與帳面已成功設定！');
     } catch (error) {
       console.error("Save Goal Error:", error);
       handleFirestoreError(error, OperationType.WRITE, `monthlyGoals/${monthStr}`);
@@ -354,7 +464,7 @@ export default function App() {
 
   // --- Calculations ---
   const calculated = useMemo(() => {
-    const { morningSales, morningCustomers, totalSales, totalCustomers, contactLensSales, allianceReturns, transferAmount, priceChangeAmount, salesAddition } = dailyData;
+    const { morningSales, morningCustomers, totalSales, totalCustomers, contactLensSales, allianceReturns, priceChangeAmount, salesAddition, transfers } = dailyData;
     
     const eveningSales = totalSales - morningSales;
     const eveningCustomers = totalCustomers - morningCustomers;
@@ -363,12 +473,19 @@ export default function App() {
     const eveningAOV = eveningCustomers > 0 ? eveningSales / eveningCustomers : 0;
     const actualPSD = totalSales - contactLensSales;
     const totalAOV = totalCustomers > 0 ? actualPSD / totalCustomers : 0;
+
+    // Calculate current day's transfer amount from transfers array
+    const currentTransferAmount = (transfers || []).reduce((sum, t) => {
+      return sum + (t.amount * (t.type === 'plus' ? 1 : -1));
+    }, 0);
     
     // Book Total Calculation (Cumulative for the current month)
     const dateKey = format(currentDate, 'yyyy-MM-dd');
-    const mergedData = { ...monthlyData, [dateKey]: dailyData };
+    // Use the calculated currentTransferAmount for the current day in mergedData
+    const currentDayDataWithCalculatedTransfers = { ...dailyData, transferAmount: currentTransferAmount };
+    const mergedData = { ...currentMonthlyData, [dateKey]: currentDayDataWithCalculatedTransfers };
     
-    let cumulativeBookTotal = 0;
+    let cumulativeBookTotal = currentMonthPreviousBalance;
     const allDates = Object.keys(mergedData).sort();
     
     allDates.forEach(date => {
@@ -386,9 +503,10 @@ export default function App() {
       eveningAOV,
       totalAOV,
       actualPSD,
+      currentTransferAmount,
       bookTotal: cumulativeBookTotal
     };
-  }, [dailyData, monthlyData, currentDate]);
+  }, [dailyData, currentMonthlyData, currentDate, currentMonthPreviousBalance]);
 
   const monthlyStats = useMemo(() => {
     let totalPSD = 0;
@@ -398,7 +516,7 @@ export default function App() {
     // ONLY if the current date being edited belongs to the month being viewed
     const dateKey = format(currentDate, 'yyyy-MM-dd');
     const isSameMonth = format(currentDate, 'yyyy-MM') === format(viewDate, 'yyyy-MM');
-    const mergedData = isSameMonth ? { ...monthlyData, [dateKey]: dailyData } : monthlyData;
+    const mergedData = isSameMonth ? { ...viewMonthlyData, [dateKey]: dailyData } : viewMonthlyData;
     
     // Only count days that have sales data (to avoid dividing by 31 if only 1 day is filled)
     const activeEntries = (Object.values(mergedData) as DailyData[]).filter(d => d.totalSales > 0);
@@ -415,7 +533,7 @@ export default function App() {
     const achievement = goal > 0 ? (monthlyAverage / goal) * 100 : 0;
     
     return { totalPSD, totalCustomers, goal, achievement, monthlyAverage, monthlyAOV, daysWithData: daysCount };
-  }, [monthlyData, dailyData, monthlyGoal, currentDate, viewDate]);
+  }, [viewMonthlyData, dailyData, monthlyGoal, currentDate, viewDate]);
 
   return (
     <ErrorBoundary>
@@ -426,12 +544,15 @@ export default function App() {
       ) : (
         <div className="min-h-screen bg-gray-50 pb-24 font-sans text-gray-900">
           {/* Header */}
-          <header className="bg-white px-6 py-4 flex items-center justify-between shadow-sm sticky top-0 z-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-airbnb rounded-xl flex items-center justify-center shadow-lg shadow-airbnb/20">
-                <Store className="w-6 h-6 text-white" />
+          <header className="bg-white px-6 py-5 flex items-center justify-between shadow-sm sticky top-0 z-10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-airbnb rounded-[28%] flex items-center justify-center shadow-lg shadow-airbnb/25">
+                <Store className="w-7 h-7 text-white" />
               </div>
-              <h1 className="text-xl font-bold tracking-tight">營運管理</h1>
+              <div>
+                <h1 className="text-xl font-bold tracking-tight leading-none">營運管理</h1>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em] mt-1">Store Management</p>
+              </div>
             </div>
             <button onClick={handleLogout} className="p-2 text-gray-400">
               <UserIcon className="w-6 h-6" />
@@ -579,7 +700,16 @@ export default function App() {
                         <div className="grid grid-cols-1 gap-4">
                           <InputGroup label="結盟進退貨" value={dailyData.allianceReturns} onChange={v => setDailyData({...dailyData, allianceReturns: v})} />
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <SignedInputGroup label="調撥金額" value={dailyData.transferAmount} onChange={v => setDailyData({...dailyData, transferAmount: v})} />
+                            <div className="space-y-1.5">
+                              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1">調撥金額 (由每日調撥自動帶入)</label>
+                              <div className={cn(
+                                "w-full bg-gray-100 border-2 border-transparent rounded-xl px-4 py-3 text-lg font-bold text-gray-500",
+                                calculated.currentTransferAmount < 0 && "text-red-500",
+                                calculated.currentTransferAmount > 0 && "text-green-500"
+                              )}>
+                                {calculated.currentTransferAmount > 0 ? '+' : ''}{calculated.currentTransferAmount.toLocaleString()}
+                              </div>
+                            </div>
                             <SignedInputGroup label="變價金額" value={dailyData.priceChangeAmount} onChange={v => setDailyData({...dailyData, priceChangeAmount: v})} />
                           </div>
                         </div>
@@ -618,6 +748,152 @@ export default function App() {
               </motion.div>
             )}
 
+            {activeTab === 'transfers' && (
+              <motion.div 
+                key="transfers"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                {/* Date Selector (Shared with Daily) */}
+                <div className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+                  <button 
+                    onClick={() => {
+                      const prev = new Date(currentDate);
+                      prev.setDate(prev.getDate() - 1);
+                      if (prev >= startOfDay(MIN_DATE)) {
+                        setCurrentDate(prev);
+                      }
+                    }} 
+                    disabled={isSameDay(currentDate, startOfDay(MIN_DATE))}
+                    className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      isSameDay(currentDate, startOfDay(MIN_DATE)) ? "bg-gray-50 text-gray-200" : "bg-gray-50 text-gray-600"
+                    )}
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div className="text-center">
+                    <div className="text-sm text-gray-400 font-medium">{format(currentDate, 'yyyy年MM月')}</div>
+                    <div className="text-lg font-bold">{format(currentDate, 'dd日 (EEEE)')}</div>
+                  </div>
+                  <button onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() + 1)))} className="p-2 bg-gray-50 rounded-lg">
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-100">
+                  <div className="bg-airbnb px-6 py-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ArrowLeftRight className="w-5 h-5 text-white" />
+                      <h2 className="text-white font-bold">每日調撥明細</h2>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        const newTransfer: TransferEntry = {
+                          id: Math.random().toString(36).substr(2, 9),
+                          amount: 0,
+                          type: 'plus'
+                        };
+                        setDailyData({
+                          ...dailyData,
+                          transfers: [...(dailyData.transfers || []), newTransfer]
+                        });
+                      }}
+                      className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition-colors"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    {(dailyData.transfers || []).length === 0 ? (
+                      <div className="text-center py-10 text-gray-400 italic">
+                        尚無調撥紀錄，點擊右上角「+」新增
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {(dailyData.transfers || []).map((transfer, index) => (
+                          <div key={transfer.id} className="bg-gray-50 p-4 rounded-2xl space-y-3 relative group">
+                            <button 
+                              onClick={() => {
+                                const newTransfers = dailyData.transfers.filter(t => t.id !== transfer.id);
+                                setDailyData({ ...dailyData, transfers: newTransfers });
+                              }}
+                              className="absolute -top-2 -right-2 bg-white text-red-500 p-1.5 rounded-full shadow-sm border border-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                            
+                            <div className="flex gap-3">
+                              <button 
+                                onClick={() => {
+                                  const newTransfers = [...dailyData.transfers];
+                                  newTransfers[index].type = transfer.type === 'plus' ? 'minus' : 'plus';
+                                  setDailyData({ ...dailyData, transfers: newTransfers });
+                                }}
+                                className={cn(
+                                  "w-14 h-12 rounded-xl font-bold text-xl transition-all border-2 flex items-center justify-center shrink-0",
+                                  transfer.type === 'minus' 
+                                    ? "bg-red-50 border-red-100 text-red-500" 
+                                    : "bg-green-50 border-green-100 text-green-500"
+                                )}
+                              >
+                                {transfer.type === 'plus' ? '+' : '-'}
+                              </button>
+                              <input 
+                                type="number"
+                                inputMode="decimal"
+                                value={transfer.amount || ''}
+                                onChange={e => {
+                                  const newTransfers = [...dailyData.transfers];
+                                  newTransfers[index].amount = parseFloat(e.target.value) || 0;
+                                  setDailyData({ ...dailyData, transfers: newTransfers });
+                                }}
+                                placeholder="金額"
+                                className="flex-1 bg-white border-2 border-transparent focus:border-airbnb rounded-xl px-4 py-2 font-bold outline-none"
+                              />
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
+                          <span className="text-gray-400 font-bold text-sm uppercase tracking-wider">今日小計</span>
+                          <span className={cn(
+                            "text-xl font-black tabular-nums",
+                            calculated.currentTransferAmount > 0 ? "text-green-500" : 
+                            calculated.currentTransferAmount < 0 ? "text-red-500" : "text-gray-800"
+                          )}>
+                            {calculated.currentTransferAmount > 0 ? '+' : ''}
+                            {calculated.currentTransferAmount.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className={cn(
+                    "w-full py-4 rounded-2xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95",
+                    isSaving ? "bg-gray-400" : "bg-airbnb text-white hover:bg-airbnb/90"
+                  )}
+                >
+                  {isSaving ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-white"></div>
+                  ) : (
+                    <>
+                      <Save className="w-6 h-6" />
+                      儲存調撥紀錄
+                    </>
+                  )}
+                </button>
+              </motion.div>
+            )}
+
             {activeTab === 'monthly' && (
               <motion.div 
                 key="monthly"
@@ -648,31 +924,53 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Monthly Goal Setting */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">本月 PSD 目標設定</h3>
-                    {isSavingGoal && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-airbnb"></div>}
+                {/* Monthly Goal & Balance Setting */}
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">本月 PSD 目標設定</h3>
+                      {isSavingGoal && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-airbnb"></div>}
+                    </div>
+                    <div className="flex gap-3">
+                      <input 
+                        type="number" 
+                        inputMode="decimal"
+                        value={monthlyGoal || ''} 
+                        onChange={e => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setMonthlyGoal(val);
+                        }}
+                        onBlur={() => handleSaveGoal(monthlyGoal, previousBalance)}
+                        placeholder="請輸入目標金額"
+                        className="flex-1 bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
+                      />
+                    </div>
                   </div>
-                  <div className="flex gap-3">
-                    <input 
-                      type="number" 
-                      inputMode="decimal"
-                      value={monthlyGoal || ''} 
-                      onChange={e => {
-                        const val = parseFloat(e.target.value) || 0;
-                        setMonthlyGoal(val);
-                      }}
-                      onBlur={() => handleSaveGoal(monthlyGoal)}
-                      placeholder="請輸入目標金額"
-                      className="flex-1 bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
-                    />
-                    <button 
-                      onClick={() => handleSaveGoal(monthlyGoal)}
-                      className="bg-airbnb text-white px-6 rounded-xl font-bold shadow-md active:scale-95 transition-all"
-                    >
-                      設定
-                    </button>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider">上月累積帳面 (期初)</h3>
+                    </div>
+                    <div className="flex gap-3">
+                      <input 
+                        type="number" 
+                        inputMode="decimal"
+                        value={previousBalance || ''} 
+                        onChange={e => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setPreviousBalance(val);
+                        }}
+                        onBlur={() => handleSaveGoal(monthlyGoal, previousBalance)}
+                        placeholder="請輸入上月累積帳面"
+                        className="flex-1 bg-gray-50 border-2 border-transparent focus:border-airbnb focus:bg-white rounded-xl px-4 py-3 text-lg font-bold transition-all outline-none"
+                      />
+                      <button 
+                        onClick={() => handleSaveGoal(monthlyGoal, previousBalance)}
+                        className="bg-airbnb text-white px-6 rounded-xl font-bold shadow-md active:scale-95 transition-all"
+                      >
+                        儲存設定
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -726,7 +1024,7 @@ export default function App() {
                     {(() => {
                       const dateKey = format(currentDate, 'yyyy-MM-dd');
                       const isSameMonth = format(currentDate, 'yyyy-MM') === format(viewDate, 'yyyy-MM');
-                      const mergedData = isSameMonth ? { ...monthlyData, [dateKey]: dailyData } : monthlyData;
+                      const mergedData = isSameMonth ? { ...viewMonthlyData, [dateKey]: dailyData } : viewMonthlyData;
                       const days = eachDayOfInterval({ start: startOfMonth(viewDate), end: endOfMonth(viewDate) });
 
                       if (monthlySubTab === 'performance') {
@@ -778,7 +1076,7 @@ export default function App() {
                           </table>
                         );
                       } else {
-                        let cumulative = 0;
+                        let cumulative = previousBalance;
                         return (
                           <table className="w-full text-left border-collapse">
                             <thead>
@@ -875,6 +1173,7 @@ export default function App() {
         {/* Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center z-20 safe-area-bottom">
           <NavButton active={activeTab === 'daily'} onClick={() => setActiveTab('daily')} icon={<Calculator />} label="每日填報" />
+          <NavButton active={activeTab === 'transfers'} onClick={() => setActiveTab('transfers')} icon={<ArrowLeftRight />} label="每日調撥" />
           <NavButton active={activeTab === 'monthly'} onClick={() => setActiveTab('monthly')} icon={<CalendarIcon />} label="月度概覽" />
           <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History />} label="歷史數據" />
         </nav>

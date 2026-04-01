@@ -11,7 +11,19 @@
         "totalCustomers": { "type": "number", "description": "整日來客數" },
         "contactLensSales": { "type": "number", "description": "隱形眼鏡營業額" },
         "allianceReturns": { "type": "number", "description": "結盟進退貨金額" },
-        "transferAmount": { "type": "number", "description": "調撥金額" },
+        "transferAmount": { "type": "number", "description": "調撥金額 (自動加總)" },
+        "transfers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "amount": { "type": "number" },
+              "type": { "type": "string", "enum": ["plus", "minus"] }
+            }
+          },
+          "description": "每日多筆調撥明細"
+        },
         "priceChangeAmount": { "type": "number", "description": "變價金額" },
         "salesAddition": { "type": "number", "description": "銷貨加項" },
         "updatedAt": { "type": "string", "format": "date-time" }
@@ -20,10 +32,11 @@
     },
     "MonthlyGoal": {
       "title": "Monthly Goal",
-      "description": "Store operation goals for a specific month.",
+      "description": "Store operation goals and starting balance for a specific month.",
       "type": "object",
       "properties": {
         "psdGoal": { "type": "number", "description": "本月 PSD 目標" },
+        "previousBalance": { "type": "number", "description": "上月累積帳面" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["psdGoal", "updatedAt"]
