@@ -1,0 +1,22 @@
+{
+  "name": "門市營運管理",
+  "short_name": "營運管理",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FF5A5F",
+  "icons": [
+    {
+      "src": "https://lh3.googleusercontent.com/d/1j6i7k4UyuYniAnOIh6uw8XgMw07SZgFY",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://lh3.googleusercontent.com/d/1j6i7k4UyuYniAnOIh6uw8XgMw07SZgFY",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
