@@ -548,7 +548,7 @@ export default function App() {
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-[28%] flex items-center justify-center shadow-lg shadow-airbnb/25 overflow-hidden">
                 <img 
-                  src="https://lh3.googleusercontent.com/d/1jEp5fOipS-4qbaWSvwHfz-09icjyzS_y" 
+                  src="https://lh3.googleusercontent.com/d/1jEp5fOipS-4qbaWSvwHfz-09icjyzS_y?v=2" 
                   alt="App Icon" 
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
